@@ -22,6 +22,8 @@ type UnaryTransport interface {
 	Close() error
 }
 
+type UnaryTransportFactory func(host string, options *ConnectOptions) UnaryTransport
+
 type httpTransport struct {
 	scheme string
 	host   string

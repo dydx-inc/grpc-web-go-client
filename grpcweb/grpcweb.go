@@ -36,7 +36,12 @@ func (c *ClientConn) Invoke(ctx context.Context, method string, args, reply inte
 	callOptions := c.applyCallOptions(opts)
 	codec := callOptions.codec
 
-	tr := transport.NewUnary(c.host, &transport.ConnectOptions{Insecure: c.dialOptions.insecure})
+	var tr transport.UnaryTransport
+	if callOptions.transport != nil {
+		tr = callOptions.transport(c.host, &transport.ConnectOptions{Insecure: c.dialOptions.insecure})
+	} else {
+		tr = transport.NewUnary(c.host, &transport.ConnectOptions{Insecure: c.dialOptions.insecure})
+	}
 	defer tr.Close()
 
 	r, err := encodeRequestBody(codec, args)

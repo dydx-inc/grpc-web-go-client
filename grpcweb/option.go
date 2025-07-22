@@ -43,6 +43,7 @@ func WithTransportCredentials(creds credentials.TransportCredentials) DialOption
 type callOptions struct {
 	codec           encoding.Codec
 	header, trailer *metadata.MD
+	transport       UnaryTransportFactory
 }
 
 type CallOption func(*callOptions)
@@ -64,5 +65,11 @@ func Trailer(t *metadata.MD) CallOption {
 	return func(opt *callOptions) {
 		*t = metadata.New(nil)
 		opt.trailer = t
+	}
+}
+
+func Transport(t UnaryTransportFactory) CallOption {
+	return func(opt *callOptions) {
+		opt.transport = t
 	}
 }
