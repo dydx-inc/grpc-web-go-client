@@ -20,6 +20,7 @@ type dialOptions struct {
 	defaultCallOptions   []CallOption
 	insecure             bool
 	transportCredentials credentials.TransportCredentials
+	transport            transport.UnaryTransportFactory
 }
 
 type DialOption func(*dialOptions)
@@ -36,6 +37,12 @@ func WithInsecure() DialOption {
 	}
 }
 
+func WithTransport(t transport.UnaryTransportFactory) DialOption {
+	return func(opt *dialOptions) {
+		opt.transport = t
+	}
+}
+
 func WithTransportCredentials(creds credentials.TransportCredentials) DialOption {
 	return func(opt *dialOptions) {
 		opt.transportCredentials = creds
@@ -45,7 +52,6 @@ func WithTransportCredentials(creds credentials.TransportCredentials) DialOption
 type callOptions struct {
 	codec           encoding.Codec
 	header, trailer *metadata.MD
-	transport       transport.UnaryTransportFactory
 }
 
 type CallOption func(*callOptions)
@@ -67,11 +73,5 @@ func Trailer(t *metadata.MD) CallOption {
 	return func(opt *callOptions) {
 		*t = metadata.New(nil)
 		opt.trailer = t
-	}
-}
-
-func Transport(t transport.UnaryTransportFactory) CallOption {
-	return func(opt *callOptions) {
-		opt.transport = t
 	}
 }
