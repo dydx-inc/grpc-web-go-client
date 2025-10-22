@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding"
+	"google.golang.org/grpc/mem"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/ktr0731/grpc-web-go-client/grpcweb/parser"
@@ -80,7 +81,7 @@ func (c *ClientConn) Invoke(ctx context.Context, method string, args, reply inte
 		if err != nil {
 			return errors.Wrap(err, "failed to parse the response body")
 		}
-		if err := codec.Unmarshal(resBody, reply); err != nil {
+		if err := codec.Unmarshal(mem.BufferSlice{mem.NewBuffer(&resBody, nil)}, reply); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal response body by codec %s", codec.Name())
 		}
 
@@ -164,11 +165,12 @@ func header(body []byte) []byte {
 
 // header (compressed-flag(1) + message-length(4)) + body
 // TODO: compressed message
-func encodeRequestBody(codec encoding.Codec, in interface{}) (io.Reader, error) {
-	body, err := codec.Marshal(in)
+func encodeRequestBody(codec encoding.CodecV2, in interface{}) (io.Reader, error) {
+	bs, err := codec.Marshal(in)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal the request body")
 	}
+	body := bs.Materialize()
 	buf := bytes.NewBuffer(make([]byte, 0, headerLen+len(body)))
 	buf.Write(header(body))
 	buf.Write(body)
