@@ -76,16 +76,22 @@ func (t *httpTransport) Close() error {
 }
 
 var NewUnary = func(host string, opts *ConnectOptions) UnaryTransport {
-	scheme := "https"
-	if opts != nil && opts.Insecure {
-		scheme = "http"
-	}
-	return &httpTransport{
-		scheme: scheme,
-		host:   host,
-		client: http.DefaultClient,
-		opts:   opts,
-		header: make(http.Header),
+	return NewUnaryWithClient(http.DefaultClient)(host, opts)
+}
+
+func NewUnaryWithClient(client *http.Client) UnaryTransportFactory {
+	return func(host string, opts *ConnectOptions) UnaryTransport {
+		scheme := "https"
+		if opts != nil && opts.Insecure {
+			scheme = "http"
+		}
+		return &httpTransport{
+			scheme: scheme,
+			host:   host,
+			client: client,
+			opts:   opts,
+			header: make(http.Header),
+		}
 	}
 }
 
