@@ -24,11 +24,24 @@ type UnaryTransport interface {
 
 type UnaryTransportFactory func(host string, options *ConnectOptions) UnaryTransport
 
+type ErrorFuncs struct {
+	New    func(string) error
+	Wrap   func(error, string) error
+	Errorf func(string, ...interface{}) error
+}
+
+var defaultErrorFuncs = ErrorFuncs{
+	New:    errors.New,
+	Wrap:   errors.Wrap,
+	Errorf: errors.Errorf,
+}
+
 type httpTransport struct {
 	scheme string
 	host   string
 	client *http.Client
 	opts   *ConnectOptions
+	errs   ErrorFuncs
 
 	header http.Header
 
@@ -41,7 +54,7 @@ func (t *httpTransport) Header() http.Header {
 
 func (t *httpTransport) Send(ctx context.Context, endpoint, contentType string, body io.Reader) (http.Header, io.ReadCloser, error) {
 	if t.sent {
-		return nil, nil, errors.New("Send must be called only one time per one Request")
+		return nil, nil, t.errs.New("Send must be called only one time per one Request")
 	}
 	defer func() {
 		t.sent = true
@@ -51,7 +64,7 @@ func (t *httpTransport) Send(ctx context.Context, endpoint, contentType string, 
 	url := u.String()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to build the API request")
+		return nil, nil, t.errs.Wrap(err, "failed to build the API request")
 	}
 
 	req.Header = t.Header()
@@ -60,11 +73,11 @@ func (t *httpTransport) Send(ctx context.Context, endpoint, contentType string, 
 
 	res, err := t.client.Do(req)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to send the API")
+		return nil, nil, t.errs.Wrap(err, "failed to send the API")
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return nil, nil, errors.Errorf("request failed: %s", res.Status)
+		return nil, nil, t.errs.Errorf("request failed: %s", res.Status)
 	}
 
 	return res.Header, res.Body, nil
@@ -75,17 +88,50 @@ func (t *httpTransport) Close() error {
 	return nil
 }
 
-var NewUnary = func(host string, opts *ConnectOptions) UnaryTransport {
-	scheme := "https"
-	if opts != nil && opts.Insecure {
-		scheme = "http"
+type UnaryOption func(*unaryConfig)
+
+type unaryConfig struct {
+	client *http.Client
+	errs   ErrorFuncs
+}
+
+func WithClient(client *http.Client) UnaryOption {
+	return func(c *unaryConfig) {
+		c.client = client
 	}
-	return &httpTransport{
-		scheme: scheme,
-		host:   host,
+}
+
+func WithErrorFuncs(ef ErrorFuncs) UnaryOption {
+	return func(c *unaryConfig) {
+		c.errs = ef
+	}
+}
+
+var NewUnary = func(host string, opts *ConnectOptions) UnaryTransport {
+	return NewUnaryFactory()(host, opts)
+}
+
+func NewUnaryFactory(opts ...UnaryOption) UnaryTransportFactory {
+	cfg := unaryConfig{
 		client: http.DefaultClient,
-		opts:   opts,
-		header: make(http.Header),
+		errs:   defaultErrorFuncs,
+	}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	return func(host string, opts *ConnectOptions) UnaryTransport {
+		scheme := "https"
+		if opts != nil && opts.Insecure {
+			scheme = "http"
+		}
+		return &httpTransport{
+			scheme: scheme,
+			host:   host,
+			client: cfg.client,
+			opts:   opts,
+			errs:   cfg.errs,
+			header: make(http.Header),
+		}
 	}
 }
 
